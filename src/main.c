@@ -238,7 +238,8 @@ static void on_output_added(struct observer* observer, void* data)
 
 	cancel_deferred_detach(self);
 
-	if (self->image_source_type == IMAGE_SOURCE_TYPE_OUTPUT) {
+	if (self->image_source_type == IMAGE_SOURCE_TYPE_OUTPUT ||
+			self->image_source_type == IMAGE_SOURCE_TYPE_UNSPEC) {
 		if (!self->image_source)
 			switch_to_output(self, output);
 	} else if (self->image_source_type == IMAGE_SOURCE_TYPE_DESKTOP) {
