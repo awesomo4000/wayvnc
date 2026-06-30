@@ -2266,6 +2266,9 @@ static struct cmd_response* on_attach(struct ctl* ctl, const char* display,
 	wayvnc_display_list_init(self);
 	blank_screen(self);
 
+	if (!ok)
+		goto out;
+
 	struct nvnc_client* nvnc_client;
 	for (nvnc_client = nvnc_client_first(self->nvnc); nvnc_client;
 			nvnc_client = nvnc_client_next(nvnc_client)) {
@@ -2283,6 +2286,7 @@ static struct cmd_response* on_attach(struct ctl* ctl, const char* display,
 
 	nvnc_set_log_fn_thread_local(NULL);
 
+out:
 	return ok ? cmd_ok() : cmd_failed("%s", intercepted_error);
 }
 
