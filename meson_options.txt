@@ -8,3 +8,5 @@ option('systemtap', type: 'boolean', value: false,
 	description: 'Enable tracing using sdt')
 option('tests', type: 'boolean', value: true,
 	description: 'Build unit tests')
+option('build-util', type: 'boolean', value: false,
+	description: 'Build development utilities')

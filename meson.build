@@ -216,6 +216,10 @@ if scdoc.found()
 	endforeach
 endif
 
+if get_option('build-util')
+	subdir('util')
+endif
+
 if get_option('tests')
 	subdir('test')
 endif
