@@ -58,6 +58,7 @@ struct output {
 	struct output_state pending;
 
 	enum image_source_power_state power;
+	bool power_management_failed;
 
 	void* userdata;
 };
