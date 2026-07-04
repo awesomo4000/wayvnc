@@ -610,12 +610,11 @@ static int client_enqueue__response(struct ctl_client* self,
 {
 	nvnc_log(NVNC_LOG_INFO, "Enqueueing response: %s (%d)",
 			response->code == 0 ? "OK" : "FAILED", response->code);
-	char* str = NULL;
-	if (response->data)
-		str = json_dumps(response->data, 0);
-	nvnc_log(NVNC_LOG_DEBUG, "Response data: %s", str);
-	if(str)
+	if (response->data) {
+		char* str = json_dumps(response->data, 0);
+		nvnc_log(NVNC_LOG_DEBUG, "Response data: %s", str);
 		free(str);
+	}
 	struct jsonipc_response* resp =
 		jsonipc_response_new(response->code, response->data, id);
 	cmd_response_destroy(response);
