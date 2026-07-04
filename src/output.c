@@ -212,9 +212,11 @@ static void output_power_failed(void *data,
 	struct output* self = data;
 	nvnc_log(NVNC_LOG_WARNING, "Output %s power state failure",
 			self->state.name);
-	self->power = IMAGE_SOURCE_POWER_UNKNOWN;
+	self->power_management_failed = true;
+	self->power = IMAGE_SOURCE_POWER_ON;
 	zwlr_output_power_v1_destroy(self->wlr_output_power);
 	self->wlr_output_power = NULL;
+	observable_notify(&self->image_source.observable.power_change, NULL);
 }
 
 static const struct zwlr_output_power_v1_listener wlr_output_power_listener = {
@@ -224,6 +226,9 @@ static const struct zwlr_output_power_v1_listener wlr_output_power_listener = {
 
 int output_acquire_power_on(struct output* output)
 {
+	if (output->power_management_failed)
+		return -1;
+
 	if (output->wlr_output_power)
 		return 1;
 
