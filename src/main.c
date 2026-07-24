@@ -2443,6 +2443,7 @@ int main(int argc, char* argv[])
 	bool disable_input = false;
 	bool use_transient_seat = false;
 	bool exit_on_disconnect = false;
+	bool with_quirks = false;
 
 	const char* log_level_name = NULL;
 	const char* log_filter = NULL;
@@ -2485,6 +2486,8 @@ int main(int argc, char* argv[])
 		  "Select output to capture." },
 		{ 'p', "show-performance", NULL,
 		  "Show performance counters." },
+		{ 'q', "with-quirks", NULL,
+		  "Enable compatibility mode" },
 		{ 'r', "render-cursor", NULL,
 		  "Enable overlay cursor rendering." },
 		{ 'R', "disable-resizing", NULL,
@@ -2535,6 +2538,7 @@ int main(int argc, char* argv[])
 	overlay_cursor = !!option_parser_get_value(&option_parser, "render-cursor");
 	show_performance = !!option_parser_get_value(&option_parser,
 			"show-performance");
+	with_quirks = !!option_parser_get_value(&option_parser, "with-quirks");
 	exit_on_disconnect = !!option_parser_get_value(&option_parser, "exit-on-disconnect");
 	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
 	use_websocket = !!option_parser_get_value(&option_parser, "websocket");
@@ -2710,6 +2714,9 @@ int main(int argc, char* argv[])
 
 	if (init_nvnc(&self) < 0)
 		goto nvnc_failure;
+
+	if (with_quirks)
+		nvnc_set_quirks(self.nvnc, UINT_MAX);
 
 	wayvnc_display_list_init(&self);
 	blank_screen(&self);
