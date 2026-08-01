@@ -102,7 +102,7 @@ static int test_defaults(void)
 	table_printer_init(&two, stderr);
 	ASSERT_INT_EQ(80, one.max_width);
 	ASSERT_INT_EQ(4, one.left_indent);
-	ASSERT_INT_EQ(4, one.column_offset);
+	ASSERT_INT_EQ(2, one.column_offset);
 	ASSERT_INT_EQ(30, one.left_width);
 	ASSERT_PTR_EQ(stdout, one.stream);
 	ASSERT_INT_EQ(20, two.max_width);

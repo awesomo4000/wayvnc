@@ -26,7 +26,7 @@
 static struct table_printer defaults = {
 	.max_width = 80,
 	.left_indent = 4,
-	.column_offset = 4,
+	.column_offset = 2,
 	.stream = NULL,
 	.left_width = 30,
 };
