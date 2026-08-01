@@ -67,7 +67,7 @@ static void format_option(struct table_printer* printer, const struct wv_option*
 				"-%c", opt->short_opt);
 	if (opt->long_opt)
 		n_chars += snprintf(buf + n_chars, sizeof(buf) - n_chars,
-				"%s--%s", opt->short_opt ? "," : "",
+				"%s--%s", opt->short_opt ? ", " : "",
 				opt->long_opt);
 	if (opt->schema)
 		n_chars += snprintf(buf + n_chars, sizeof(buf) - n_chars,
