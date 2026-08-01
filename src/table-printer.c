@@ -109,8 +109,7 @@ void table_printer_print_line(struct table_printer* self, const char* left_text,
 {
 	int field_len = fprintf(self->stream, "%*s", self->left_indent, "");
 	field_len += fprintf(self->stream, "%s", left_text);
-	if (field_len > self->left_width - self->column_offset -
-			self->left_indent) {
+	if (field_len > self->left_width - self->column_offset) {
 		fprintf(self->stream, "\n");
 		field_len = 0;
 	}
