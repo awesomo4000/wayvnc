@@ -2014,10 +2014,17 @@ void log_image_source(struct wayvnc* self)
  * undershooting clips the pointer. Anchoring at the origin also means the
  * hotspot needs no adjustment, so cursor placement cannot drift.
  *
+ * The margins are modest because the non-zero extent turned out to be
+ * trustworthy after all: instrumenting the capture showed it tight and
+ * correct (9x16 for the I-beam, 10x16 for the arrow) while the buffer's
+ * own damage region was always the full 256x256 and useless for cropping.
+ * The garbage that made earlier attempts look wrong was a stride bug in
+ * this function, not bad data from the compositor.
+ *
  * Returns a frame the caller must unref, or NULL to send the buffer as-is.
  */
-#define CURSOR_CROP_PAD 24
-#define CURSOR_CROP_MIN 48
+#define CURSOR_CROP_PAD 8
+#define CURSOR_CROP_MIN 32
 
 static struct nvnc_frame* crop_cursor_frame(struct wv_buffer* buffer)
 {
@@ -2054,7 +2061,13 @@ static struct nvnc_frame* crop_cursor_frame(struct wv_buffer* buffer)
 	if (cw == buffer->width && ch == buffer->height)
 		return NULL;		/* nothing to gain */
 
-	struct nvnc_frame* frame = nvnc_frame_new(cw, ch, buffer->format, cw * 4);
+	/* stride is in PIXELS, not bytes: nvnc_frame_new() computes its
+	 * allocation as height * stride * bpp, and pngfb.c passes
+	 * row_bytes / 4. Passing cw * 4 here made cursor.c's mask extraction
+	 * index rows four times too far apart, reading past the pixels that
+	 * were actually written -- which rendered as a truncated arrow with
+	 * scattered garbage dots beneath it. */
+	struct nvnc_frame* frame = nvnc_frame_new(cw, ch, buffer->format, cw);
 	if (!frame)
 		return NULL;
 
