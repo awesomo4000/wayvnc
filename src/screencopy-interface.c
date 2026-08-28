@@ -19,6 +19,8 @@
 #include "wayland.h"
 
 #include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
 
 extern struct wayland* wayland;
 
@@ -31,6 +33,27 @@ struct screencopy* screencopy_create(struct image_source* source,
 {
 	if (image_source_is_desktop(source))
 		return desktop_capture_impl.create(source, render_cursor);
+
+	/* WAYVNC_SCREENCOPY=wlr forces the older zwlr_screencopy path.
+	 *
+	 * The selection below unconditionally prefers ext-image-copy-capture
+	 * whenever the compositor advertises it, which sway 1.11 / wlroots
+	 * 0.19.3 does -- so the wlr path is unreachable and there is no flag
+	 * to pick it. That matters because the two differ in how damage is
+	 * reported, and a client sending INCREMENTAL update requests (which is
+	 * every real viewer) only gets a frame when damage is signalled.
+	 *
+	 * Measured here: with a constantly-damaged screen, incremental updates
+	 * arrived roughly 3 times in 12 seconds regardless of encoding (raw,
+	 * zrle and tight were all equally starved), while forcing
+	 * NON-incremental full captures ran at ~16 fps. Capture and encode are
+	 * therefore fine; it is the damage signal that is missing.
+	 */
+	const char* force = getenv("WAYVNC_SCREENCOPY");
+	if (force && strcmp(force, "wlr") == 0 &&
+			wayland->zwlr_screencopy_manager_v1)
+		return wlr_screencopy_impl.create(source, render_cursor);
+
 	if (wayland->ext_image_copy_capture_manager_v1 &&
 			wayland->ext_output_image_capture_source_manager_v1)
 		return ext_image_copy_capture_impl.create(source, render_cursor);

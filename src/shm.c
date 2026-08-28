@@ -19,6 +19,8 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include "config.h"
 
@@ -47,7 +49,42 @@ static void randname(char *buf)
 
 static int create_shm_file(void)
 {
-#ifdef HAVE_MEMFD
+/* NetBSD is checked FIRST, ahead of HAVE_MEMFD, and that ordering IS the fix.
+ *
+ * NetBSD 10 added memfd_create(2), so meson's feature test finds it and
+ * defines HAVE_MEMFD -- but a descriptor from NetBSD's memfd cannot be
+ * mmapped by the process it is PASSED TO over SCM_RIGHTS. wayvnc hands
+ * exactly such a descriptor to the compositor in
+ * zwp_virtual_keyboard_v1.keymap; wlroots mmaps it, gets MAP_FAILED and
+ * calls wl_client_post_no_memory(), which appears on the wire as
+ *     wl_display#1: error 2: no memory
+ * and tears the connection down the instant a VNC client connects. Remote
+ * input never works and the session drops immediately.
+ *
+ * Everything else was ruled out by measurement rather than assumption:
+ * shm_open, shm_unlink, ftruncate, write and mmap (MAP_PRIVATE and
+ * MAP_SHARED) all succeed on NetBSD, and the 31140-byte keymap round-trips
+ * cleanly through xkb_keymap_get_as_string() -> xkb_keymap_new_from_string().
+ * The descriptor is the only remaining variable.
+ *
+ * A plain file, unlinked immediately, is as anonymous as a memfd and has no
+ * such restriction when passed across a socket.
+ */
+#if defined(__NetBSD__)
+	const char *dir = getenv("XDG_RUNTIME_DIR");
+	if (!dir)
+		dir = "/tmp";
+
+	char path[256];
+	snprintf(path, sizeof(path), "%s/wayvnc-shm-XXXXXX", dir);
+
+	int fd = mkstemp(path);
+	if (fd < 0)
+		return -1;
+
+	unlink(path);
+	return fd;
+#elif defined(HAVE_MEMFD)
 	return memfd_create("wayvnc-shm", 0);
 #elif defined(__FreeBSD__)
 	// memfd_create added in FreeBSD 13, but SHM_ANON has been supported for ages

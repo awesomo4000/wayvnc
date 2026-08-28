@@ -1988,6 +1988,87 @@ void log_image_source(struct wayvnc* self)
 	}
 }
 
+
+/* Crop a captured cursor down to a generously padded box at the buffer origin.
+ *
+ * The cursor capture session returns a buffer sized to the compositor's
+ * cursor PLANE, not the cursor. Here that is 256x256 holding a small pointer
+ * in one corner, so every cursor update shipped 256*256*4 + mask = 264 KiB,
+ * of which almost all is padding. Measured against Xvnc on the same machine:
+ * 264 KiB per cursor update versus 0.3 KiB. On a slow link one cursor change
+ * alone took seconds, and everything else queued behind it.
+ *
+ * Deliberately imprecise. Two earlier attempts tried to find the exact
+ * extent of the cursor and both rendered wrongly:
+ *
+ *   - keying on "alpha != 0" cropped to the wrong region entirely, because
+ *     the transmitted cursor carries its shape in the RFB mask and its pixel
+ *     alpha is zero throughout at depth 24;
+ *   - keying on "pixel word != 0" picked up stray non-zero words scattered
+ *     through the unused part of the buffer, and still clipped part of the
+ *     arrow.
+ *
+ * So this does not try to be exact. It anchors at (0,0), extends past the
+ * furthest non-zero pixel by CURSOR_CROP_PAD, and never goes below
+ * CURSOR_CROP_MIN. Overshooting costs a few KiB against a 264 KiB baseline;
+ * undershooting clips the pointer. Anchoring at the origin also means the
+ * hotspot needs no adjustment, so cursor placement cannot drift.
+ *
+ * Returns a frame the caller must unref, or NULL to send the buffer as-is.
+ */
+#define CURSOR_CROP_PAD 24
+#define CURSOR_CROP_MIN 48
+
+static struct nvnc_frame* crop_cursor_frame(struct wv_buffer* buffer)
+{
+	if (!buffer->pixels || buffer->width <= 0 || buffer->height <= 0)
+		return NULL;
+	if (buffer->stride < buffer->width * 4)
+		return NULL;		/* not 32bpp; leave it alone */
+	if (buffer->y_inverted)
+		return NULL;		/* row order would need flipping too */
+
+	const uint8_t* base = buffer->pixels;
+	int maxx = -1, maxy = -1;
+
+	for (int y = 0; y < buffer->height; ++y) {
+		const uint32_t* row =
+			(const uint32_t*)(base + (size_t)y * buffer->stride);
+		for (int x = 0; x < buffer->width; ++x) {
+			if (row[x] == 0)
+				continue;
+			if (x > maxx) maxx = x;
+			if (y > maxy) maxy = y;
+		}
+	}
+	if (maxx < 0)
+		return NULL;		/* nothing drawn at all */
+
+	int cw = maxx + 1 + CURSOR_CROP_PAD;
+	int ch = maxy + 1 + CURSOR_CROP_PAD;
+	if (cw < CURSOR_CROP_MIN) cw = CURSOR_CROP_MIN;
+	if (ch < CURSOR_CROP_MIN) ch = CURSOR_CROP_MIN;
+	if (cw > buffer->width)  cw = buffer->width;
+	if (ch > buffer->height) ch = buffer->height;
+
+	if (cw == buffer->width && ch == buffer->height)
+		return NULL;		/* nothing to gain */
+
+	struct nvnc_frame* frame = nvnc_frame_new(cw, ch, buffer->format, cw * 4);
+	if (!frame)
+		return NULL;
+
+	uint8_t* dst = nvnc_frame_get_addr(frame);
+	for (int y = 0; y < ch; ++y)
+		memcpy(dst + (size_t)y * cw * 4,
+			base + (size_t)y * buffer->stride,
+			(size_t)cw * 4);
+
+	nvnc_log(NVNC_LOG_DEBUG, "Cropped cursor %dx%d -> %dx%d",
+			buffer->width, buffer->height, cw, ch);
+	return frame;
+}
+
 static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
 		struct image_source* source)
 {
@@ -2010,8 +2091,20 @@ static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
 	int x_hotspot = round(h_scale * buffer->x_hotspot);
 	int y_hotspot = round(v_scale * buffer->y_hotspot);
 
-	nvnc_set_cursor(self->nvnc, buffer->nvnc_frame, x_hotspot, y_hotspot,
-			is_damaged);
+	struct nvnc_frame* cropped = crop_cursor_frame(buffer);
+	if (cropped) {
+		nvnc_frame_set_logical_width(cropped,
+				round(h_scale * nvnc_frame_get_width(cropped)));
+		nvnc_frame_set_logical_height(cropped,
+				round(v_scale * nvnc_frame_get_height(cropped)));
+		/* Anchored at the origin, so the hotspot is unchanged. */
+		nvnc_set_cursor(self->nvnc, cropped, x_hotspot, y_hotspot,
+				is_damaged);
+		nvnc_frame_unref(cropped);
+	} else {
+		nvnc_set_cursor(self->nvnc, buffer->nvnc_frame, x_hotspot,
+				y_hotspot, is_damaged);
+	}
 
 	wv_buffer_release(buffer);
 
