@@ -468,8 +468,52 @@ static bool update_key_state(struct keyboard* self, xkb_keycode_t code,
 	return true;
 }
 
+static struct held_key* held_key_find(struct keyboard* self,
+		xkb_keysym_t symbol)
+{
+	for (size_t i = 0; i < sizeof(self->held_keys) / sizeof(self->held_keys[0]); ++i)
+		if (self->held_keys[i].in_use &&
+				self->held_keys[i].symbol == symbol)
+			return &self->held_keys[i];
+	return NULL;
+}
+
+static struct held_key* held_key_alloc(struct keyboard* self)
+{
+	for (size_t i = 0; i < sizeof(self->held_keys) / sizeof(self->held_keys[0]); ++i)
+		if (!self->held_keys[i].in_use)
+			return &self->held_keys[i];
+	return NULL;
+}
+
+/* Send the release of a key using exactly the keycode and level its press
+ * used. See the comment on struct held_key in keyboard.h for why this cannot
+ * simply be resolved again. */
+static void keyboard_release_held(struct keyboard* self, struct held_key* held)
+{
+	if (update_key_state(self, held->code, false)) {
+		keyboard_apply_mods(self, held->code, false);
+		if (held->level_is_match)
+			send_key(self, held->code, false);
+		else
+			send_key_with_level(self, held->code, false,
+					held->level);
+	}
+	held->in_use = false;
+}
+
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 {
+	if (!is_pressed) {
+		struct held_key* held = held_key_find(self, symbol);
+		if (held) {
+			keyboard_release_held(self, held);
+			return;
+		}
+		/* No record of the press: fall through and resolve as before,
+		 * which is still better than dropping the release entirely. */
+	}
+
 	struct table_entry* entry = keyboard_find_symbol(self, symbol);
 	if (!entry) {
 		char name[256];
@@ -494,6 +538,17 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 
 	if (!update_key_state(self, entry->code, is_pressed))
 		return;
+
+	if (is_pressed) {
+		struct held_key* held = held_key_alloc(self);
+		if (held) {
+			held->in_use = true;
+			held->symbol = symbol;
+			held->code = entry->code;
+			held->level = entry->level;
+			held->level_is_match = level_is_match;
+		}
+	}
 
 	keyboard_apply_mods(self, entry->code, is_pressed);
 

@@ -40,6 +40,26 @@ struct keyboard {
 
 	struct intset key_state;
 
+	/* Which keycode each currently-held keysym was pressed with.
+	 *
+	 * keyboard_feed() resolves a keysym to a keycode with match_level(),
+	 * which consults the LIVE xkb state -- and the press itself mutates
+	 * that state via keyboard_apply_mods(). So the release of a key can
+	 * resolve to a different keycode than its press did, update_key_state()
+	 * then sees no change and returns early, and the release is never sent.
+	 * The key stays logically held, so the compositor starts repeating it.
+	 *
+	 * Recording the press lets the release reuse the exact same keycode and
+	 * level, which is the only way to guarantee the pair is symmetric.
+	 */
+	struct held_key {
+		bool in_use;
+		xkb_keysym_t symbol;
+		xkb_keycode_t code;
+		int level;
+		bool level_is_match;
+	} held_keys[64];
+
 	int last_sent_group;
 };
 
